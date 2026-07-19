@@ -4,12 +4,13 @@ import os
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
-from sqlalchemy import create_engine, func, select
+from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.orm import Session
 
-from pipeline.db.models import PriceSnapshot, Product, Run
+from pipeline.db.models import Base, PriceSnapshot, Product, Run
 from pipeline.load import load_fuel_es, load_raw_dir
 
 pytestmark = pytest.mark.skipif(
@@ -22,14 +23,22 @@ DAY = date(2026, 7, 19)
 
 @pytest.fixture
 def session():
-    engine = create_engine(os.environ["DATABASE_URL"])
-    conn = engine.connect()
-    tx = conn.begin()
-    session = Session(bind=conn)
-    yield session
-    session.close()
-    tx.rollback()  # nothing this test did survives
-    conn.close()
+    """Fresh throwaway Postgres schema per test: full isolation from real data."""
+    url = os.environ["DATABASE_URL"]
+    schema = f"test_{uuid4().hex[:8]}"
+    admin = create_engine(url)
+    with admin.begin() as conn:
+        conn.execute(text(f'CREATE SCHEMA "{schema}"'))
+
+    engine = create_engine(url, connect_args={"options": f"-csearch_path={schema}"})
+    Base.metadata.create_all(engine)
+    with Session(engine) as session:
+        yield session
+    engine.dispose()
+
+    with admin.begin() as conn:
+        conn.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+    admin.dispose()
 
 
 @pytest.fixture

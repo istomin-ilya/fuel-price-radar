@@ -75,12 +75,12 @@ def load_fuel_es(session: Session, payload: dict, collected_at: date) -> tuple[i
     return len(products), 0
 
 
-def load_raw_dir(session: Session, day_dir: Path) -> None:
+def load_raw_dir(session: Session, day_dir: Path) -> Run | None:
     """Load one data/raw/YYYY-MM-DD/ directory, logging a Run per source."""
     collected_at = date.fromisoformat(day_dir.name)
     path = day_dir / "fuel_es.json.gz"
     if not path.exists():
-        return
+        return None
 
     source = ensure_source(session, "fuel_es", "api", fuel_es.API_URL)
     run = Run(source_id=source.id, started_at=datetime.now(UTC), status="running")
@@ -95,3 +95,4 @@ def load_raw_dir(session: Session, day_dir: Path) -> None:
         raise
     finally:
         run.finished_at = datetime.now(UTC)
+    return run
