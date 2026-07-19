@@ -16,4 +16,6 @@ RUN uv sync --frozen --no-install-project --no-dev
 COPY . .
 RUN uv sync --frozen --no-dev
 
-CMD ["supercronic", "/app/crontab"]
+# absolute path matters: as PID 1 supercronic re-execs itself via argv[0],
+# and exec() does no PATH lookup
+CMD ["/usr/local/bin/supercronic", "/app/crontab"]
