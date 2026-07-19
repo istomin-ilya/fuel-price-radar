@@ -3,7 +3,7 @@ import time
 
 import httpx
 
-USER_AGENT = "fuel-price-radar/1.0 (+github.com/istomin-ilya/fuel-price-radar)"
+USER_AGENT = "fuel-price-radar/1.0 (+github.com/isistomin/fuel-price-radar)"
 MAX_ATTEMPTS = 3
 BACKOFF_S = [1.5, 3.0]  # pauses between attempts
 
