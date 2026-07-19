@@ -2,16 +2,17 @@ import argparse
 from datetime import UTC, datetime
 from pathlib import Path
 
-from pipeline.collectors import fuel_es
+from pipeline.collectors import eu_bulletin, fuel_es
 
 RAW_ROOT = Path("data/raw")
 
 
 def cmd_collect(_args: argparse.Namespace) -> None:
     day_dir = RAW_ROOT / datetime.now(UTC).strftime("%Y-%m-%d")
-    path = fuel_es.collect(day_dir)
-    size_kb = path.stat().st_size / 1024
-    print(f"saved {path} ({size_kb:.0f} KiB)")
+    for collector in (fuel_es, eu_bulletin):
+        path = collector.collect(day_dir)
+        size_kb = path.stat().st_size / 1024
+        print(f"saved {path} ({size_kb:.0f} KiB)")
 
 
 def cmd_load(_args: argparse.Namespace) -> None:
@@ -21,10 +22,13 @@ def cmd_load(_args: argparse.Namespace) -> None:
     session = make_session()
     try:
         for day_dir in sorted(p for p in RAW_ROOT.iterdir() if p.is_dir()):
-            run = load_raw_dir(session, day_dir)
+            runs = load_raw_dir(session, day_dir)
             session.commit()
-            if run is not None:
-                print(f"{day_dir.name}: {run.status}, ok={run.items_ok} failed={run.items_failed}")
+            for run in runs:
+                print(
+                    f"{day_dir.name} source={run.source_id}: {run.status}, "
+                    f"ok={run.items_ok} failed={run.items_failed}"
+                )
     finally:
         session.close()
 

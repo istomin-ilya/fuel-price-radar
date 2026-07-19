@@ -1,44 +1,18 @@
 import gzip
 import json
-import os
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
-from uuid import uuid4
 
 import pytest
-from sqlalchemy import create_engine, func, select, text
-from sqlalchemy.orm import Session
+from sqlalchemy import func, select
 
-from pipeline.db.models import Base, PriceSnapshot, Product, Run
-from pipeline.load import load_fuel_es, load_raw_dir
-
-pytestmark = pytest.mark.skipif(
-    "DATABASE_URL" not in os.environ, reason="needs a database"
-)
+from pipeline.db.models import PriceSnapshot, Product
+from pipeline.load import load_eu_bulletin, load_fuel_es, load_raw_dir
 
 FIXTURE = Path(__file__).parent / "fixtures" / "fuel_es_sample.json"
+BULLETIN_FIXTURE = Path(__file__).parent / "fixtures" / "eu_bulletin_history_sample.xlsx"
 DAY = date(2026, 7, 19)
-
-
-@pytest.fixture
-def session():
-    """Fresh throwaway Postgres schema per test: full isolation from real data."""
-    url = os.environ["DATABASE_URL"]
-    schema = f"test_{uuid4().hex[:8]}"
-    admin = create_engine(url)
-    with admin.begin() as conn:
-        conn.execute(text(f'CREATE SCHEMA "{schema}"'))
-
-    engine = create_engine(url, connect_args={"options": f"-csearch_path={schema}"})
-    Base.metadata.create_all(engine)
-    with Session(engine) as session:
-        yield session
-    engine.dispose()
-
-    with admin.begin() as conn:
-        conn.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
-    admin.dispose()
 
 
 @pytest.fixture
@@ -87,16 +61,42 @@ def test_next_day_adds_new_snapshots_not_products(session, payload):
     assert count(session, PriceSnapshot) == 26
 
 
-def test_load_raw_dir_logs_run(session, payload, tmp_path):
+def test_load_raw_dir_logs_run_per_source(session, payload, tmp_path):
     day_dir = tmp_path / "2026-07-19"
     day_dir.mkdir()
     (day_dir / "fuel_es.json.gz").write_bytes(
         gzip.compress(json.dumps(payload).encode())
     )
+    (day_dir / "eu_bulletin_history.xlsx").write_bytes(BULLETIN_FIXTURE.read_bytes())
 
-    load_raw_dir(session, day_dir)
+    runs = load_raw_dir(session, day_dir)
 
-    run = session.scalar(select(Run))
-    assert run.status == "ok"
-    assert run.items_ok == 13
-    assert run.finished_at is not None
+    assert len(runs) == 2
+    assert all(r.status == "ok" and r.finished_at is not None for r in runs)
+    assert runs[0].items_ok == 13  # fuel_es
+    assert runs[1].items_ok > 0  # eu_bulletin
+
+
+def test_load_eu_bulletin_known_week(session):
+    ok, failed = load_eu_bulletin(session, BULLETIN_FIXTURE)
+    assert ok > 0
+
+    product = session.scalar(select(Product).where(Product.external_id == "ES:g95"))
+    assert product.category == "g95"
+    assert product.attrs == {"country": "ES"}
+
+    snap = session.scalar(
+        select(PriceSnapshot).where(
+            PriceSnapshot.product_id == product.id,
+            PriceSnapshot.collected_at == date(2026, 7, 13),
+        )
+    )
+    assert snap.price_eur == Decimal("1.542")
+    assert snap.price_pre_tax_eur == Decimal("0.951")
+
+
+def test_load_eu_bulletin_idempotent(session):
+    load_eu_bulletin(session, BULLETIN_FIXTURE)
+    first = session.scalar(select(func.count()).select_from(PriceSnapshot))
+    load_eu_bulletin(session, BULLETIN_FIXTURE)
+    assert session.scalar(select(func.count()).select_from(PriceSnapshot)) == first
