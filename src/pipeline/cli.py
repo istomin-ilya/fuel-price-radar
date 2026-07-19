@@ -33,6 +33,21 @@ def cmd_load(_args: argparse.Namespace) -> None:
         session.close()
 
 
+def cmd_marts(_args: argparse.Namespace) -> None:
+    from sqlalchemy import text
+
+    from pipeline.db.session import make_session
+
+    session = make_session()
+    try:
+        for sql_file in sorted(Path("sql/marts").glob("*.sql")):
+            session.execute(text(sql_file.read_text()))
+            print(f"applied {sql_file.name}")
+        session.commit()
+    finally:
+        session.close()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="pipeline", description="Fuel Price Radar pipeline")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -42,6 +57,9 @@ def main() -> None:
 
     p_load = sub.add_parser("load", help="upsert raw snapshots into Postgres")
     p_load.set_defaults(func=cmd_load)
+
+    p_marts = sub.add_parser("marts", help="create or refresh SQL mart views")
+    p_marts.set_defaults(func=cmd_marts)
 
     args = parser.parse_args()
     args.func(args)
