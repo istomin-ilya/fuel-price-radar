@@ -68,14 +68,17 @@ The `cron` container fires `collect && load` daily at 05:30 UTC. Repeat the `ale
 
 ## Status page
 
-`python -m pipeline site` renders a static status page into `site/` — pipeline health from the `runs` journal, latest Spanish pump prices, two charts. Plain HTML + PNG, no backend: the daily cron job rebuilds it right after the load, so the files are always current and can be served by anything. With Caddy in front, mounting it under a path is four lines:
+`python -m pipeline site` renders a static status page into `site/` — pipeline health from the `runs` journal, latest Spanish pump prices, two charts. Plain HTML + PNG, no backend: the daily cron job rebuilds it right after the load, so the files are always current and can be served by anything. Live at [isistomin.com/fuel](https://isistomin.com/fuel/).
 
-```
-your-domain.com {
-    handle_path /fuel* {
-        root * /path/to/fuel-price-radar/site
-        file_server
-    }
+With nginx in front, mounting it under a path takes one `alias` (plus a read-only volume if nginx runs in Docker):
+
+```nginx
+location = /fuel { return 301 /fuel/; }
+
+location /fuel/ {
+    alias /var/www/fuel/;   # -> fuel-price-radar/site, mounted read-only
+    index index.html;
+    add_header Cache-Control "no-cache" always;
 }
 ```
 
