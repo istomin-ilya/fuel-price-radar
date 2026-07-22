@@ -66,6 +66,19 @@ docker compose exec cron sh -c "cd /app && .venv/bin/alembic upgrade head"
 
 The `cron` container fires `collect && load` daily at 05:30 UTC. Repeat the `alembic upgrade` after pulling a release that ships new migrations.
 
+## Status page
+
+`python -m pipeline site` renders a static status page into `site/` — pipeline health from the `runs` journal, latest Spanish pump prices, two charts. Plain HTML + PNG, no backend: the daily cron job rebuilds it right after the load, so the files are always current and can be served by anything. With Caddy in front, mounting it under a path is four lines:
+
+```
+your-domain.com {
+    handle_path /fuel* {
+        root * /path/to/fuel-price-radar/site
+        file_server
+    }
+}
+```
+
 ## Schema
 
 ```
@@ -106,7 +119,6 @@ Inside Spain the spread is wide. The Canary Islands and the autonomous cities ru
 
 ## Roadmap
 
-- Public status page (FastAPI + Caddy) showing pipeline runs and latest prices
 - Metabase for ad-hoc exploration
 - Partitioning `price_snapshots` when the table earns it
 - Pin and scan the Docker base image

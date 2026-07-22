@@ -26,6 +26,7 @@ services:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-fuel}:${POSTGRES_PASSWORD:-fuel}@postgres:5432/${POSTGRES_DB:-fuel}
     volumes:
       - ./data:/app/data
+      - ./site:/app/site
 
 volumes:
   pgdata:

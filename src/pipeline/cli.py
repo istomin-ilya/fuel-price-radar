@@ -48,6 +48,13 @@ def cmd_marts(_args: argparse.Namespace) -> None:
         session.close()
 
 
+def cmd_site(_args: argparse.Namespace) -> None:
+    from pipeline.site import build
+
+    index = build(Path("site"))
+    print(f"built {index}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="pipeline", description="Fuel Price Radar pipeline")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -60,6 +67,9 @@ def main() -> None:
 
     p_marts = sub.add_parser("marts", help="create or refresh SQL mart views")
     p_marts.set_defaults(func=cmd_marts)
+
+    p_site = sub.add_parser("site", help="render the static status page into site/")
+    p_site.set_defaults(func=cmd_site)
 
     args = parser.parse_args()
     args.func(args)
