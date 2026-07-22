@@ -61,3 +61,21 @@ def test_regional_spread_slices_by_province_and_brand(session):
     repsol = by_dim_name[("brand", "REPSOL")]
     assert repsol.avg_price_eur == Decimal("1.709")
     assert repsol.n_stations == 1
+
+
+def test_spain_vs_eu_tax_share(session):
+    load_eu_bulletin(session, FIXTURES / "eu_bulletin_history_sample.xlsx")
+    apply_marts(session)
+
+    rows = session.execute(
+        text(
+            "SELECT country, price_eur, price_pre_tax_eur, tax_share "
+            "FROM mart_spain_vs_eu WHERE week = '2026-07-13' AND category = 'g95'"
+        )
+    ).all()
+
+    assert {r.country for r in rows} == {"ES", "FR", "PT", "IT", "DE", "EU"}
+    es = next(r for r in rows if r.country == "ES")
+    assert es.price_eur == Decimal("1.542")
+    # (1.542 - 0.951) / 1.542 = 0.383 — taxes are ~38% of the pump price
+    assert es.tax_share == Decimal("0.383")
