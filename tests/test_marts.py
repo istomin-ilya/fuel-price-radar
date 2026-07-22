@@ -38,3 +38,26 @@ def test_price_history_combines_both_sources(session):
         if r.series == "eu_bulletin" and r.country == "ES" and r.category == "g95"
     ]
     assert len(bulletin_es) == 12  # 12 weeks in the fixture
+
+
+def test_regional_spread_slices_by_province_and_brand(session):
+    payload = json.loads((FIXTURES / "fuel_es_sample.json").read_text())
+    load_fuel_es(session, payload, date(2026, 7, 19))
+    apply_marts(session)
+
+    rows = session.execute(
+        text(
+            "SELECT dimension, name, avg_price_eur, n_stations "
+            "FROM mart_regional_spread WHERE category = 'g95'"
+        )
+    ).all()
+
+    by_dim_name = {(r.dimension, r.name): r for r in rows}
+    # ALBACETE g95 stations in the fixture: 1.599, 1.489, 1.669 -> avg 1.586
+    albacete = by_dim_name[("province", "ALBACETE")]
+    assert albacete.avg_price_eur == Decimal("1.586")
+    assert albacete.n_stations == 3
+
+    repsol = by_dim_name[("brand", "REPSOL")]
+    assert repsol.avg_price_eur == Decimal("1.709")
+    assert repsol.n_stations == 1
